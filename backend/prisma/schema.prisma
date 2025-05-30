@@ -13,23 +13,103 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-model User {
-  id        String   @id @default(cuid())
-  email     String   @unique
-  name      String?
-  password  String
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-  posts     Post[]
+enum ReportType {
+  PYTEST
+  PLAYWRIGHT
 }
 
-model Post {
-  id        String   @id @default(cuid())
-  title     String
-  content   String?
-  published Boolean  @default(false)
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-  author    User     @relation(fields: [authorId], references: [id])
-  authorId  String
+enum PatchStatus {
+  PENDING
+  APPLIED
+  REJECTED
+}
+
+model User {
+  id         Int             @id @default(autoincrement())
+  email      String          @unique
+  name       String?
+  planId     Int
+  plan       Plan            @relation(fields: [planId], references: [id])
+  createdAt  DateTime        @default(now())
+  updatedAt  DateTime        @updatedAt
+  reports    TestReport[]
+  usageLogs  UsageMetric[]
+}
+
+model Plan {
+  id            Int     @id @default(autoincrement())
+  name          String  @unique
+  description   String?
+  requestsLimit Int     // 月間リクエスト上限など
+  users         User[]
+}
+
+model TestReport {
+  id          Int         @id @default(autoincrement())
+  type        ReportType
+  filePath    String
+  generatedAt DateTime    @default(now())
+  userId      Int
+  user        User        @relation(fields: [userId], references: [id])
+  failures    Failure[]
+}
+
+model Failure {
+  id             Int              @id @default(autoincrement())
+  nodeId         String
+  filePath       String
+  errorMessage   String
+  stackTrace     String?
+  screenshotPath String?
+  reportId       Int
+  report         TestReport       @relation(fields: [reportId], references: [id])
+  clusterId      Int?
+  cluster        FailureCluster?  @relation(fields: [clusterId], references: [id])
+  patch          Patch?
+  createdAt      DateTime         @default(now())
+}
+
+model FailureCluster {
+  id        Int        @id @default(autoincrement())
+  name      String
+  failures  Failure[]
+  prompt    Prompt?
+}
+
+model Prompt {
+  id         Int              @id @default(autoincrement())
+  content    String           // 実際に送信したプロンプト文字列
+  clusterId  Int     @unique
+  cluster    FailureCluster   @relation(fields: [clusterId], references: [id])
+  createdAt  DateTime         @default(now())
+}
+
+model Patch {
+  id          Int         @id @default(autoincrement())
+  diff        String
+  fullPatch   String?
+  status      PatchStatus @default(PENDING)
+  failureId   Int     @unique
+  failure     Failure  @relation(fields: [failureId], references: [id])
+  appliedAt   DateTime?
+  pullRequest PullRequest?
+}
+
+model PullRequest {
+  id          Int       @id @default(autoincrement())
+  url         String
+  branchName  String
+  status      String    // e.g. "OPEN", "MERGED", "CLOSED"
+  patchId     Int     @unique
+  patch       Patch    @relation(fields: [patchId], references: [id])
+  createdAt   DateTime  @default(now())
+}
+
+model UsageMetric {
+  id               Int      @id @default(autoincrement())
+  promptTokens     Int
+  completionTokens Int
+  recordedAt       DateTime @default(now())
+  userId           Int
+  user             User     @relation(fields: [userId], references: [id])
 }
